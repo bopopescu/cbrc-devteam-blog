@@ -3,8 +3,27 @@
 	<head>
 		<title>信息中心开发团队博客</title>
 		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8"/>
+		<style type="text/css">
+			
+		</style>
+		<link rel="stylesheet" type="text/css" href="/media/css/common.css"/>
 	</head>
-	<body>
-		建设中...
+	<body class="main-layout">
+		{% include "nav-bar.tpl" %}
+		<div class="content-layout">
+			{% for article in articles %}
+				<div class="article-summary-layout">
+					<div class="article-head">
+						<h1 class="article-title"><a href="/article/{{ article.id }}">{{ article.title }}</a></h1>
+						<div class="article-description">
+							项目: {{ article.project.name }}&nbsp;&nbsp;&nbsp;
+							作者: {{ article.author.name }}&nbsp;&nbsp;&nbsp;
+							发表于: {{ article.publish_time }}
+						</div>
+					</div>
+					<p class="article-summary-body">{{ article.content }}</p>
+				</div>
+			{% end %}
+		</div>
 	</body>
 </html>
