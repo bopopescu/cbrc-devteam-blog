@@ -16,7 +16,7 @@ class Project:
         self.id = None
         self.name = None
         self.abbr_name = None
-        self.owner_id = None
+        self.owner = None
         self.description = None
         self.create_time = None
         self.last_update_time = None

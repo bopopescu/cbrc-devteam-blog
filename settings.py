@@ -12,6 +12,7 @@ app_settings = {
     "index_page": "index.html",
     "about_page": "about.html",
     "article_page": "article.html",
+    "project_list_page": "project_list.html",
 	"404_page": "404.html",
     "app_static_file_dir": os.path.join(app_home_dir, "media"),
     "app_lib_dir": os.path.join(app_home_dir, "lib"),

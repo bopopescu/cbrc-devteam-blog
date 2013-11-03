@@ -5,8 +5,9 @@ from domain.domain import Article
 from domain.domain import Project
 from domain.domain import User
 
+# 鏂囩珷绠＄悊
 class ArticleService:
-    # 查询最近发表的文章
+    # 鏌ヨ鏈�杩戝彂琛ㄧ殑鏂囩珷
     def query_most_published_article(self):
         conn = mysql.connector.connect(**settings.app_settings["db_connection"])
         sql = "".join(["select a.id as id,a.project_id as project_id,p.name as project_name,a.author_id as author_id,", 
@@ -45,7 +46,7 @@ class ArticleService:
 
         return articles
 
-    # 根据文章 ID 查询文章
+    # 鏍规嵁鏂囩珷 ID 鏌ヨ鏂囩珷
     def find(self, article_id):
         conn = mysql.connector.connect(**settings.app_settings["db_connection"])
         sql = "".join(["select a.id as id,a.project_id as project_id,p.name as project_name,a.author_id as author_id,", 
@@ -80,4 +81,38 @@ class ArticleService:
         conn.close()
         return article
 
+# 椤圭洰绠＄悊
+class ProjectService:
+    def list(self):
+        conn = mysql.connector.connect(**settings.app_settings["db_connection"])
+        sql = "".join(["select p.id as id,p.name as name,p.abbr_name as abbr_name,p.description as description,", 
+                "p.owner_id as owner_id,u.name as owner_name,p.create_time as create_time,p.last_update_time",
+                " from project as p left join user as u on p.owner_id=u.id order by p.create_time asc"])
+        cursor = conn.cursor()
+        cursor.execute(sql)
+
+        projects = None
+        for (id, name, abbr_name, description, owner_id, owner_name, create_time, last_update_time) in cursor:
+            if (not projects):
+                projects = []
+            p = Project()
+            projects.append(p)
+            p.id = id
+            p.name = name
+            p.abbr_name = abbr_name
+            p.description = description
+            if (owner_id):
+                owner = User()
+                p.owner = owner
+                owner.id = owner_id
+                owner.name = owner_name
+            p.create_time = create_time
+            p.last_update_time = last_update_time
+
+        cursor.close()
+        conn.close()
+        return projects
+
+
 articleService = ArticleService()
+projectService = ProjectService()
