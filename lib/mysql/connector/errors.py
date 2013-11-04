@@ -24,10 +24,12 @@
 """Python exceptions
 """
 
-from . import utils
-from . import errorcode
-from .locales import get_client_error
+from mysql.connector import utils
+from mysql.connector.locales import get_client_error
 
+# _CUSTOM_ERROR_EXCEPTIONS holds custom exceptions and is ued by the
+# function custom_error_exception. _ERROR_EXCEPTIONS (at bottom of module)
+# is similar, but hardcoded exceptions.
 _CUSTOM_ERROR_EXCEPTIONS = {}
 
 def custom_error_exception(error=None, exception=None):
@@ -112,6 +114,13 @@ def get_mysql_exception(errno, msg, sqlstate=None):
         # Error was not mapped to particular exception
         pass
 
+    try:
+        return _ERROR_EXCEPTIONS[errno](
+            msg=msg, errno=errno, sqlstate=sqlstate)
+    except KeyError:
+        # Error was not mapped to particular exception
+        pass
+
     if not sqlstate:
         return DatabaseError(msg=msg, errno=errno)
 
@@ -154,31 +163,35 @@ def get_exception(packet):
 class Error(Exception):
     """Exception that is base class for all other error exceptions"""
     def __init__(self, msg=None, errno=None, values=None, sqlstate=None):
-        super().__init__()
         self.msg = msg
+        self._full_msg = self.msg
         self.errno = errno or -1
         self.sqlstate = sqlstate
-        
+
         if not self.msg and (2000 <= self.errno < 3000):
-            errmsg = get_client_error(self.errno)
+            self.msg = get_client_error(self.errno)
             if values is not None:
                 try:
-                    errmsg = errmsg % values
+                    self.msg = self.msg % values
                 except TypeError as err:
-                    errmsg = errmsg + " (Warning: %s)" % err
-            self.msg = errmsg
+                    self.msg = "{0} (Warning: {1})".format(self.msg, str(err))
         elif not self.msg:
-            self.msg = 'Unknown error'
-        
+            self._full_msg = self.msg = 'Unknown error'
+
         if self.msg and self.errno != -1:
+            fields = {
+                'errno': self.errno,
+                'msg': self.msg
+            }
             if self.sqlstate:
-                self.msg = '{} ({}): {}'.format(self.errno,
-                                                self.sqlstate, self.msg)
+                fmt = '{errno} ({state}): {msg}'
+                fields['state'] = self.sqlstate
             else:
-                self.msg = '{}: {}'.format(self.errno, self.msg)
+                fmt = '{errno}: {msg}'
+            self._full_msg = fmt.format(**fields)
     
     def __str__(self):
-        return self.msg
+        return self._full_msg
 
 class Warning(Exception):
     """Exception for important warnings"""
@@ -216,6 +229,10 @@ class NotSupportedError(DatabaseError):
     """Exception for errors when an unsupported database feature was used"""
     pass
 
+class PoolError(Error):
+    """Exception raise for errors relating to connection pooling"""
+    pass
+
 _SQLSTATE_CLASS_EXCEPTION = {
     '02': DataError, # no data
     '07': DatabaseError, # dynamic SQL error
@@ -250,3 +267,7 @@ _SQLSTATE_CLASS_EXCEPTION = {
     'HY': DatabaseError, # default when no SQLState provided by MySQL server
 }
 
+_ERROR_EXCEPTIONS = {
+    1243: ProgrammingError,
+    1210: ProgrammingError,
+}

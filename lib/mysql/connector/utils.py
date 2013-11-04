@@ -201,6 +201,10 @@ def read_lc_string_list(buf):
     
     while v:
         first = bytes(v[0:1])
+        if first == b'\xff':
+            # Special case when MySQL error 1317 is returned by MySQL.
+            # We simply return None.
+            return None
         if first == b'\xfb':
             # NULL value
             byteslst.append(None)
@@ -211,7 +215,13 @@ def read_lc_string_list(buf):
                 byteslst.append(bytes(v[1:l+1]))
                 v = v[1+l:]
             else:
-                lsize = sizes[first]
+                lsize = 0
+                try:
+                    lsize = sizes[first]
+                except KeyError:
+                    print(buf)
+                    print(_digest_buffer(buf))
+                    return None
                 l = intread(bytes(v[1:lsize+1]))
                 byteslst.append(bytes(v[lsize+1:l+lsize+1]))
                 v = v[lsize+l+1:]

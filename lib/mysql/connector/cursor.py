@@ -27,7 +27,7 @@
 import weakref
 import re
 
-from . import errors
+from mysql.connector import errors
 
 RE_SQL_COMMENT = re.compile("\/\*.*\*\/")
 RE_SQL_ON_DUPLICATE = re.compile(r'\s*ON DUPLICATE KEY.*$')
@@ -36,6 +36,8 @@ RE_SQL_INSERT_STMT = re.compile(r'INSERT\s+INTO', re.I)
 RE_PY_PARAM = re.compile(b'(%s)')
 RE_SQL_SPLIT_STMTS = re.compile(
     b''';(?=(?:[^"'`]*["'`][^"'`]*["'`])*[^"'`]*$)''')
+RE_SQL_FIND_PARAM = re.compile(
+    b'''%s(?=(?:[^"'`]*["'`][^"'`]*["'`])*[^"'`]*$)''')
 
 class _ParamSubstitutor(object):
     def __init__(self, params):
@@ -70,6 +72,13 @@ class CursorBase(object):
         self._last_insert_id = None
         self.arraysize = 1
     
+    def __del__(self):
+        try:
+            self.close()
+        except ReferenceError:
+            # The connection was already gone, we ignore the ReferenceError
+            pass
+
     def callproc(self, procname, args=()):
         pass
     
@@ -173,6 +182,7 @@ class MySQLCursor(CursorBase):
         self._warning_count = 0
         self._executed = None
         self._executed_list = []
+        self._binary = False 
         
         if connection is not None:
             self._set_connection(connection)
@@ -288,6 +298,7 @@ class MySQLCursor(CursorBase):
         return None
         
     def _row_to_python(self, rowdata, desc=None):
+        """Convert the row from MySQL to Python types""" 
         res = ()
         try:
             if not desc:
@@ -493,6 +504,9 @@ class MySQLCursor(CursorBase):
                 
         # Optimize INSERTs by batching them
         if re.match(RE_SQL_INSERT_STMT,operation):
+            if not seq_params:
+                self._rowcount = 0
+                return
             return self._batch_insert(operation,seq_params)
         
         rowcnt = 0
@@ -522,14 +536,14 @@ class MySQLCursor(CursorBase):
         return iter(self._stored_results)
     
     def callproc(self, procname, args=()):
-        """Calls a stored procedue with the given arguments
+        """Calls a stored procedure with the given arguments
         
         The arguments will be set during this session, meaning
         they will be called like  _<procname>__arg<nr> where
         <nr> is an enumeration (+1) of the arguments.
         
         Coding Example:
-          1) Definining the Stored Routine in MySQL:
+          1) Defining the Stored Routine in MySQL:
           CREATE PROCEDURE multiply(IN pFac1 INT, IN pFac2 INT, OUT pProd INT)
           BEGIN
             SET pProd := pFac1 * pFac2;
@@ -538,8 +552,8 @@ class MySQLCursor(CursorBase):
           2) Executing in Python:
           args = (5,5,0) # 0 is to hold pprod
           cursor.callproc('multiply', args)
-          print cursor.fetchone()
-
+          print(cursor.fetchone())
+          
         Does not return a value, but a result set will be
         available when the CALL-statement execute successfully.
         Raises exceptions when something is wrong.
@@ -550,7 +564,7 @@ class MySQLCursor(CursorBase):
         if not isinstance(args, (tuple, list)):
             raise ValueError("args must be a sequence")
 
-        argfmt = "@_%s_arg%d"
+        argfmt = "@_{name}_arg{index}"
         self._stored_results = []
 
         results = []
@@ -559,11 +573,11 @@ class MySQLCursor(CursorBase):
 
             if args:
                 for idx,arg in enumerate(args):
-                    argname = argfmt % (procname, idx+1)
+                    argname = argfmt.format(name=procname, index=idx+1)
                     argnames.append(argname)
                     self.execute("SET {0}=%s".format(argname), (arg,))
         
-            call = "CALL %s(%s)" % (procname,','.join(argnames))
+            call = "CALL {0}({1})".format(procname, ','.join(argnames))
 
             for result in self._connection.cmd_query_iter(call):
                 if 'columns' in result:
@@ -572,7 +586,7 @@ class MySQLCursor(CursorBase):
                     results.append(tmp)
 
             if argnames:
-                select = "SELECT %s" % ','.join(argnames)
+                select = "SELECT {0}".format(','.join(argnames))
                 self.execute(select)
                 self._stored_results = results
                 return self.fetchone()
@@ -582,9 +596,9 @@ class MySQLCursor(CursorBase):
             
         except errors.Error:
             raise
-        except Exception as e:
+        except Exception as err:
             raise errors.InterfaceError(
-                "Failed calling stored routine; %s" % e)
+                "Failed calling stored routine; {0}".format(err))
     
     def getlastrowid(self):
         """Returns the value generated for an AUTO_INCREMENT column
@@ -630,35 +644,43 @@ class MySQLCursor(CursorBase):
             self._warnings = self._fetch_warnings()
     
     def _fetch_row(self):
-        if self._have_unread_result() is False:
+        """Returns the next row in the result set
+
+        Returns a tuple or None.
+        """
+        if not self._have_unread_result():
             return None
         row = None
-        try:
-            if self._nextrow == (None, None):
-                (row, eof) = self._connection.get_row()
-            else:
-                (row, eof) = self._nextrow
-            if row:
-                (foo, eof) = self._nextrow = self._connection.get_row()
-                if eof is not None:
-                    self._handle_eof(eof)
-                if self._rowcount == -1:
-                    self._rowcount = 1
-                else:
-                    self._rowcount += 1
-            if eof:
-                self._handle_eof(eof)
-        except:
-            raise
+
+        if self._nextrow == (None, None):
+            (row, eof) = self._connection.get_row(
+                binary=self._binary, columns=self.description)
         else:
-            return row
-            
-        return None
+            (row, eof) = self._nextrow
+
+        if row:
+            self._nextrow = self._connection.get_row(
+                binary=self._binary, columns=self.description)
+            eof = self._nextrow[1]
+            if eof is not None:
+                self._handle_eof(eof)
+            if self._rowcount == -1:
+                self._rowcount = 1
+            else:
+                self._rowcount += 1
+        if eof:
+            self._handle_eof(eof)
+
+        return row
     
     def fetchwarnings(self):
         return self._warnings
         
     def fetchone(self):
+        """Returns next row of a query result set
+
+        Returns a tuple or None.
+        """
         row = self._fetch_row()
         if row:
             return self._row_to_python(row)
@@ -672,7 +694,6 @@ class MySQLCursor(CursorBase):
             row = self.fetchone()
             if row:
                 res.append(row)
-            
         return res
     
     def fetchall(self):
@@ -833,3 +854,152 @@ class MySQLCursorBufferedRaw(MySQLCursorBuffered):
     def with_rows(self):
         return self._rows is not None
 
+
+class MySQLCursorPrepared(MySQLCursor):
+    """Cursor using MySQL Prepared Statements
+    """
+    def __init__(self, connection=None):
+        super(MySQLCursorPrepared, self).__init__(connection)
+        self._rows = None
+        self._next_row = 0
+        self._prepared = None
+        self._binary = True
+
+    def callproc(self, *args, **kwargs):
+        """Calls a stored procedue
+
+        Not supported with MySQLCursorPrepared.
+        """
+        raise errors.NotSupportedError()
+    
+    def close(self):
+        """Close the cursor
+
+        This method will try to deallocate the prepared statement and close
+        the cursor.
+        """
+        if self._prepared:
+            try:
+                self._connection.cmd_stmt_close(self._prepared['statement_id'])
+            except errors.Error:
+                # We tried to deallocate, but it's OK when we fail.
+                pass
+            self._prepared = None
+        super(MySQLCursorPrepared, self).close()
+
+    def _row_to_python(self, rowdata, desc=None):
+        """Convert row data from MySQL to Python types
+
+        The conversion is done while reading binary data in the
+        protocol module.
+        """
+        pass
+    
+    def _handle_result(self, res):
+        """Handle result after execution"""
+        if isinstance(res, dict):
+            self._connection.unread_result = False
+            self._have_result = False
+            self._handle_noresultset(res)
+        else:
+            self._description = res[1]
+            self._connection.unread_result = True
+            self._have_result = True
+    
+    def execute(self, operation, params=()):
+        """Prepare and execute a MySQL Prepared Statement
+
+        This method will preare the given operation and execute it using
+        the optionally given parameters.
+
+        If the cursor instance already had a prepared statement, it is
+        first closed.
+        """
+        if operation is not self._executed:
+            if self._prepared:
+                self._connection.cmd_stmt_close(self._prepared['statement_id'])
+
+            self._executed = operation
+            try:
+                if not isinstance(operation, bytes):
+                    operation = operation.encode(self._connection.charset)
+            except (UnicodeDecodeError, UnicodeEncodeError) as e:
+                raise errors.ProgrammingError(str(e))
+
+            # need to convert %s to ? before sending it to MySQL
+            if b'%s' in operation:
+                operation = re.sub(RE_SQL_FIND_PARAM, b'?', operation)
+
+            try:
+                self._prepared = self._connection.cmd_stmt_prepare(operation)
+            except errors.Error:
+                self._executed = None
+                raise
+
+        self._connection.cmd_stmt_reset(self._prepared['statement_id'])
+
+        if self._prepared['parameters'] and not params:
+            return
+        elif len(self._prepared['parameters']) != len(params):
+            raise errors.ProgrammingError(
+                errno=1210,
+                msg="Incorrect number of arguments "
+                    "executing prepared statement")
+
+        res = self._connection.cmd_stmt_execute(
+            self._prepared['statement_id'],
+            data=params,
+            parameters=self._prepared['parameters'])
+        self._handle_result(res)
+        
+    def executemany(self, operation, seq_params):
+        """Prepare and execute a MySQL Prepared Statement many times
+
+        This method will prepare the given operation and execute with each
+        tuple found the list seq_params.
+
+        If the cursor instance already had a prepared statement, it is
+        first closed.
+
+        executemany() simply calls execute().
+        """
+        rowcnt = 0
+        try:
+            for params in seq_params:
+                self.execute(operation, params)
+                if self.with_rows and self._have_unread_result():
+                    self.fetchall()
+                rowcnt += self._rowcount
+        except (ValueError, TypeError) as err:
+            raise errors.InterfaceError(
+                "Failed executing the operation; {error}".format(error=err))
+        except:
+            # Raise whatever execute() raises
+            raise
+        self._rowcount = rowcnt
+
+    def fetchone(self):
+        """Returns next row of a query result set
+
+        Returns a tuple or None.
+        """
+        return self._fetch_row() or None
+
+    def fetchmany(self, size=None):
+        res = []
+        cnt = (size or self.arraysize)
+        while cnt > 0 and self._have_unread_result():
+            cnt -= 1
+            row = self._fetch_row()
+            if row:
+                res.append(row)
+        return res
+
+    def fetchall(self):
+        if not self._have_unread_result():
+            raise errors.InterfaceError("No result set to fetch from.")
+        (rows, eof) = self._connection.get_rows(
+            binary=self._binary, columns=self.description)
+        self._rowcount = len(rows)
+        self._handle_eof(eof)
+        return rows

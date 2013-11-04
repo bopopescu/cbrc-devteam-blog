@@ -29,7 +29,7 @@ DB API v2.0 (PEP-249).
 import time
 import datetime
 
-from . import constants
+from mysql.connector import constants
 
 class _DBAPITypeObject:
     

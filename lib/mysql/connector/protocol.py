@@ -25,6 +25,7 @@
 """
 
 import struct
+import datetime
 from decimal import Decimal
 
 try:
@@ -32,8 +33,9 @@ try:
 except ImportError:
     from sha import new as sha1
 
-from .constants import (FieldFlag, ServerCmd)
-from . import (errors, utils)
+from mysql.connector.constants import (FieldFlag, ServerCmd, FieldType)
+from mysql.connector import (errors, utils)
+
 
 class MySQLProtocol(object):
     def _scramble_password(self, passwd, seed):
@@ -251,3 +253,343 @@ class MySQLProtocol(object):
                 rows.append(rowdata)
             i += 1
         return (rows, eof)
+
+    def _parse_binary_integer(self, packet, field):
+        """Parse an integer from a binary packet"""
+        if field[1] == FieldType.TINY:
+            format = 'b'
+            length = 1
+        elif field[1] == FieldType.SHORT:
+            format = 'h'
+            length = 2
+        elif field[1] in (FieldType.INT24, FieldType.LONG):
+            format = 'i'
+            length = 4
+        elif field[1] == FieldType.LONGLONG:
+            format = 'q'
+            length = 8
+
+        if field[7] & FieldFlag.UNSIGNED:
+            format = format.upper()
+
+        return (packet[length:], struct.unpack(format, packet[0:length])[0])
+
+    def _parse_binary_float(self, packet, field):
+        """Parse a float/double from a binary packet"""
+        if field[1] == FieldType.DOUBLE:
+            length = 8
+            format = 'd'
+        else:
+            length = 4
+            format = 'f'
+
+        return (packet[length:], struct.unpack(format, packet[0:length])[0])
+
+    def _parse_binary_timestamp(self, packet, field):
+        """Parse a timestamp from a binary packet"""
+        length = packet[0]
+        value = None
+        if length == 4:
+            value = datetime.date(
+                year=struct.unpack('H', packet[1:3])[0],
+                month=packet[3],
+                day=packet[4])
+        elif length >= 7:
+            ms = 0
+            if length == 11:
+                ms = struct.unpack('I', packet[8:length+1])[0]
+            value = datetime.datetime(
+                year=struct.unpack('H', packet[1:3])[0],
+                month=packet[3],
+                day=packet[4],
+                hour=packet[5],
+                minute=packet[6],
+                second=packet[7],
+                microsecond=ms)
+
+        return (packet[length+1:], value)
+
+    def _parse_binary_time(self, packet, field):
+        """Parse a time value from a binary packet"""
+        length = packet[0]
+        data = packet[1:length + 1]
+        ms = 0
+        if length > 8:
+            ms = struct.unpack('I', data[8:])[0]
+        days = struct.unpack('I', data[1:5])[0]
+        if data[0] == 1:
+            days *= -1
+        tmp = datetime.timedelta(days=days,
+                                 seconds=data[7],
+                                 microseconds=ms,
+                                 minutes=data[6],
+                                 hours=data[5])
+
+        return (packet[length+1:], tmp)
+
+    def _parse_binary_values(self, fields, packet):
+        """Parse values from a binary result packet"""
+        null_bitmap_length = (len(fields) + 7 + 2) // 8
+        null_bitmap = utils.intread(packet[0:null_bitmap_length])
+        packet = packet[null_bitmap_length:]
+
+        values = []
+        for pos, field in enumerate(fields):
+            if null_bitmap & 1 << (pos + 2):
+                values.append(None)
+                continue
+            elif field[1] in (FieldType.TINY, FieldType.SHORT,
+                              FieldType.INT24,
+                              FieldType.LONG, FieldType.LONGLONG):
+                (packet, value) = self._parse_binary_integer(packet, field)
+                values.append(value)
+            elif field[1] in (FieldType.DOUBLE, FieldType.FLOAT):
+                (packet, value) = self._parse_binary_float(packet, field)
+                values.append(value)
+            elif field[1] in (FieldType.DATETIME, FieldType.DATE,
+                              FieldType.TIMESTAMP):
+                (packet, value) = self._parse_binary_timestamp(packet, field)
+                values.append(value)
+            elif field[1] == FieldType.TIME:
+                (packet, value) = self._parse_binary_time(packet, field)
+                values.append(value)
+            else:
+                (packet, value) = utils.read_lc_string(packet)
+                values.append(value)
+
+        return tuple(values)
+
+    def read_binary_result(self, sock, columns, count=1):
+        """Read MySQL binary protocol result
+
+        Reads all or given number of binary resultset rows from the socket.
+        """
+        rows = []
+        eof = None
+        values = None
+        i = 0
+        while True:
+            if eof is not None:
+                break
+            if i == count:
+                break
+            packet = sock.recv()
+            if packet[4] == 254:
+                eof = self.parse_eof(packet)
+                values = None
+            elif packet[4] == 0:
+                eof = None
+                values = self._parse_binary_values(columns, packet[5:])
+            if eof is None and values is not None:
+                rows.append(values)
+            i += 1
+        return (rows, eof)
+
+    def parse_binary_prepare_ok(self, packet):
+        """Parse a MySQL Binary Protocol OK packet"""
+        if not packet[4] == 0:
+            raise errors.InterfaceError("Failed parsing Binary OK packet")
+
+        ok = {}
+        try:
+            (packet, ok['statement_id']) = utils.read_int(packet[5:], 4)
+            (packet, ok['num_columns']) = utils.read_int(packet, 2)
+            (packet, ok['num_params']) = utils.read_int(packet, 2)
+            packet = packet[1:]  # Filler 1 * \x00
+            (packet, ok['warning_count']) = utils.read_int(packet, 2)
+        except ValueError:
+            raise errors.InterfaceError("Failed parsing Binary OK packet")
+
+        return ok
+
+    def _prepare_binary_integer(self, value):
+        """Prepare an integer for the MySQL binary protocol"""
+        field_type = None
+        flags = 0
+        if value < 0:
+            if value >= -128:
+                format = 'b'
+                field_type = FieldType.TINY
+            elif value >= -32768:
+                format = 'h'
+                field_type = FieldType.SHORT
+            elif value >= -2147483648:
+                format = 'i'
+                field_type = FieldType.LONG
+            else:
+                format = 'q'
+                field_type = FieldType.LONGLONG
+        else:
+            flags = 128
+            if value <= 255:
+                format = 'B'
+                field_type = FieldType.TINY
+            elif value <= 65535:
+                format = 'H'
+                field_type = FieldType.SHORT
+            elif value <= 4294967295:
+                format = 'I'
+                field_type = FieldType.LONG
+            else:
+                field_type = FieldType.LONGLONG
+                format = 'Q'
+        return (struct.pack(format, value), field_type, flags)
+
+    def _prepare_binary_timestamp(self, value):
+        """Prepare a timestamp object for the MySQL binary protocol
+
+        This method prepares a timestamp of type datetime.datetime or
+        datetime.date for sending over the MySQL binary protocol.
+        A tuple is returned with the prepared value and field type
+        as elements.
+
+        Raises ValueError when the argument value is of invalid type.
+
+        Returns a tuple.
+        """
+        if isinstance(value, datetime.datetime):
+            field_type = FieldType.DATETIME
+        elif isinstance(value, datetime.date):
+            field_type = FieldType.DATE
+        else:
+            raise ValueError(
+                "Argument must a datetime.datetime or datetime.date")
+
+        packed = (utils.int2store(value.year) +
+                  utils.int1store(value.month) +
+                  utils.int1store(value.day))
+
+        if isinstance(value, datetime.datetime):
+            packed = (packed + utils.int1store(value.hour) +
+                      utils.int1store(value.minute) +
+                      utils.int1store(value.second))
+            if value.microsecond > 0:
+                packed += utils.int4store(value.microsecond)
+
+        packed = utils.int1store(len(packed)) + packed
+        return (packed, field_type)
+
+    def _prepare_binary_time(self, value):
+        """Prepare a time object for the MySQL binary protocol
+
+        This method prepares a time object of type datetime.timedelta or
+        datetime.time for sending over the MySQL binary protocol.
+        A tuple is returned with the prepared value and field type
+        as elements.
+
+        Raises ValueError when the argument value is of invalid type.
+
+        Returns a tuple.
+        """
+        if not isinstance(value, (datetime.timedelta, datetime.time)):
+            raise ValueError(
+                "Argument must a datetime.timedelta or datetime.time")
+
+        field_type = FieldType.TIME
+        negative = 0
+        ms = None
+        packed = b''
+
+        if isinstance(value, datetime.timedelta):
+            if value.days < 0:
+                negative = 1
+            (hours, r) = divmod(value.seconds, 3600)
+            (mins, secs) = divmod(r, 60)
+            packed += (utils.int4store(abs(value.days)) +
+                       utils.int1store(hours) +
+                       utils.int1store(mins) +
+                       utils.int1store(secs))
+            ms = value.microseconds
+        else:
+            packed += (utils.int4store(0) +
+                       utils.int1store(value.hour) +
+                       utils.int1store(value.minute) +
+                       utils.int1store(value.second))
+            ms = value.microsecond
+        if ms:
+            packed += utils.int4store(ms)
+
+        packed = utils.int1store(negative) + packed
+        packed = utils.int1store(len(packed)) + packed
+
+        return (packed, field_type)
+
+    def _prepare_stmt_send_long_data(self, statement, param, data):
+        """Prepare long data for prepared statments
+
+        Returns a string.
+        """
+        packet = (
+            utils.int4store(statement) +
+            utils.int2store(param) +
+            data)
+        return packet
+
+    def make_stmt_execute(self, statement_id, data=(), parameters=(),
+                          flags=0, long_data_used={}):
+        """Make a MySQL packet with the Statement Execute command"""
+        iteration_count = 1
+        null_bitmap = [0]*((len(data) + 7) // 8)
+        values = []
+        types = []
+        packed = b''
+        if parameters and data:
+            if len(data) != len(parameters):
+                raise errors.InterfaceError(
+                    "Failed executing prepared statement: data values does not"
+                    " match number of parameters")
+            for pos, param in enumerate(parameters):
+                value = data[pos]
+                flags = 0
+                if value is None:
+                    null_bitmap[(pos // 8)] |= 1 << (pos % 8)
+                    continue
+                elif pos in long_data_used:
+                    if long_data_used[pos][0]:
+                        # We suppose binary data
+                        field_type = FieldType.BLOB
+                    else:
+                        # We suppose text data
+                        field_type = FieldType.STRING
+                elif isinstance(value, int):
+                    (packed, field_type,
+                     flags) = self._prepare_binary_integer(value)
+                    values.append(packed)
+                elif isinstance(value, str):
+                    values.append(
+                        utils.intstore(len(value)) + value.encode('utf8'))
+                    field_type = FieldType.VARCHAR
+                elif isinstance(value, Decimal):
+                    values.append(
+                        utils.intstore(len(str(value))) +\
+                            str(value).encode('utf8'))
+                    field_type = FieldType.DECIMAL
+                elif isinstance(value, float):
+                    values.append(struct.pack('d', value))
+                    field_type = FieldType.DOUBLE
+                elif isinstance(value, (datetime.datetime, datetime.date)):
+                    (packed, field_type) = self._prepare_binary_timestamp(
+                        value)
+                    values.append(packed)
+                elif isinstance(value, (datetime.timedelta, datetime.time)):
+                    (packed, field_type) = self._prepare_binary_time(value)
+                    values.append(packed)
+                else:
+                    raise errors.ProgrammingError(
+                        "MySQL binary protocol can not handle "
+                        "'{classname}' objects".format(
+                            classname=value.__class__.__name__))
+                types.append(utils.int1store(field_type) +
+                             utils.int1store(flags))
+
+        packet = (
+            utils.int4store(statement_id),
+            utils.int1store(flags),
+            utils.int4store(iteration_count),
+            b''.join([struct.pack('B', bit) for bit in null_bitmap]),
+            utils.int1store(1),
+            b''.join(types),
+            b''.join(values)
+            )
+        return b''.join(packet)
+

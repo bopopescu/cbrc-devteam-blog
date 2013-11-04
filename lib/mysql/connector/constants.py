@@ -24,7 +24,7 @@
 """Various MySQL constants and character sets
 """
 
-from .errors import ProgrammingError
+from mysql.connector.errors import ProgrammingError
 
 MAX_PACKET_LENGTH = 16777215
 NET_BUFFER_LENGTH = 8192
@@ -419,31 +419,31 @@ class RefreshOption(_constants):
 class ShutdownType(_constants):
     """Shutdown types used by the COM_SHUTDOWN server command."""
     _prefix = ''
-    SHUTDOWN_DEFAULT = 0
-    SHUTDOWN_WAIT_CONNECTIONS = 1
-    SHUTDOWN_WAIT_TRANSACTIONS = 2
-    SHUTDOWN_WAIT_UPDATES = 8
-    SHUTDOWN_WAIT_ALL_BUFFERS = 10
-    SHUTDOWN_WAIT_CRITICAL_BUFFERS = 11
-    KILL_QUERY = 254
-    KILL_CONNECTION = 255
+    SHUTDOWN_DEFAULT = b'\x00'
+    SHUTDOWN_WAIT_CONNECTIONS = b'\x01'
+    SHUTDOWN_WAIT_TRANSACTIONS = b'\x02'
+    SHUTDOWN_WAIT_UPDATES = b'\x08'
+    SHUTDOWN_WAIT_ALL_BUFFERS = b'\x10'
+    SHUTDOWN_WAIT_CRITICAL_BUFFERS = b'\x11'
+    KILL_QUERY = b'\xfe'
+    KILL_CONNECTION = b'\xff'
 
     desc = {
-        'SHUTDOWN_DEFAULT': (0,
+        'SHUTDOWN_DEFAULT': (SHUTDOWN_DEFAULT,
             "defaults to SHUTDOWN_WAIT_ALL_BUFFERS"),
-        'SHUTDOWN_WAIT_CONNECTIONS': (1,
+        'SHUTDOWN_WAIT_CONNECTIONS': (SHUTDOWN_WAIT_CONNECTIONS,
             "wait for existing connections to finish"),
-        'SHUTDOWN_WAIT_TRANSACTIONS': (2,
+        'SHUTDOWN_WAIT_TRANSACTIONS': (SHUTDOWN_WAIT_TRANSACTIONS,
             "wait for existing trans to finish"),
-        'SHUTDOWN_WAIT_UPDATES': (8,
+        'SHUTDOWN_WAIT_UPDATES': (SHUTDOWN_WAIT_UPDATES,
             "wait for existing updates to finish"),
-        'SHUTDOWN_WAIT_ALL_BUFFERS': (10,
+        'SHUTDOWN_WAIT_ALL_BUFFERS': (SHUTDOWN_WAIT_ALL_BUFFERS,
             "flush InnoDB and other storage engine buffers"),
-        'SHUTDOWN_WAIT_CRITICAL_BUFFERS': (11,
+        'SHUTDOWN_WAIT_CRITICAL_BUFFERS': (SHUTDOWN_WAIT_CRITICAL_BUFFERS,
             "don't flush InnoDB buffers, "
             "flush other storage engines' buffers"),
-        'KILL_QUERY': (254, "(no description)"),
-        'KILL_CONNECTION': (255, "(no description)"),
+        'KILL_QUERY': (KILL_QUERY, "(no description)"),
+        'KILL_CONNECTION': (KILL_CONNECTION, "(no description)"),
     }
 
 

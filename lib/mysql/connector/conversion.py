@@ -29,11 +29,16 @@ import datetime
 import time
 from decimal import Decimal
 
-from . import errors
-from .constants import FieldType, FieldFlag
+from mysql.connector import errors
+from mysql.connector.constants import FieldType, FieldFlag
 
-class ConverterBase(object):
+
+class MySQLConverterBase(object):
+    """Base class for conversion classes
     
+    All class dealing with converting to and from MySQL data types must
+    be a subclass of this class.
+    """
     def __init__(self, charset='utf8', use_unicode=True):
         self.python_types = None
         self.mysql_types = None
@@ -62,22 +67,21 @@ class ConverterBase(object):
     def quote(self, buf):
         return str(buf)
 
-class MySQLConverter(ConverterBase):
-    """
-    A converted class grouping:
-     o escape method: for escpaing values send to MySQL
+class MySQLConverter(MySQLConverterBase):
+    """Default conversion class for MySQL Connector/Python.
+    
+     o escape method: for escaping values send to MySQL
      o quoting method: for quoting values send to MySQL in statements
      o conversion mapping: maps Python and MySQL data types to
        function for converting them.
        
-    This class should be overloaded whenever one needs differences
-    in how values are to be converted. Each MySQLConnection object
-    has a default_converter property, which can be set like
-      MySQL.converter(CustomMySQLConverter)
+    Whenever one needs to convert values differently, a converter_class 
+    argument can be given while instantiating a new connection like 
+    cnx.connect(converter_class=CustomMySQLConverterClass).
       
     """
     def __init__(self, charset=None, use_unicode=True):
-        ConverterBase.__init__(self, charset, use_unicode)
+        MySQLConverterBase.__init__(self, charset, use_unicode)
     
     def escape(self, value):
         """
