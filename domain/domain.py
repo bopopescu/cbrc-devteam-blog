@@ -38,6 +38,6 @@ class Tag:
     def __init__(self):
         self.id = None
         self.name = None
-        self.author_id = None
+        self.author = None
         self.create_time = None
         self.last_update_time = None

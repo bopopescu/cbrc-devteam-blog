@@ -10,8 +10,9 @@ import handlers.blog
 handlers = [
     (r"/", handlers.util.IndexHandler),
     (r"/about", handlers.util.AboutHandler),
-    (r"/project", handlers.blog.ProjectHandler),
     (r"/article/(.*)", handlers.blog.ArticleHandler),
+    (r"/tag", handlers.blog.TagHandler),
+    (r"/tag/(.*)", handlers.blog.ArticleListByTagHandler),
     (r"/media/(.*)", tornado.web.StaticFileHandler, {"path": settings.app_settings["app_static_file_dir"]}),
 	(r"/favicon.ico", tornado.web.RedirectHandler, {"url": "/media/image/favicon.ico"}),
     (r"/(.*)", handlers.util.PageNotFoundHandler)

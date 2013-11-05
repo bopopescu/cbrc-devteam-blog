@@ -4,21 +4,9 @@ create database if if not exists cbrc_dev_blog default character set utf8;
 
 -- table
 
--- project 项目
-create table if not exists project (
-	id int not null,
-	name varchar(256) not null,
-	abbr_name varchar(256),
-	description varchar(256),
-	owner_id int,
-	create_time timestamp,
-	last_update_time timestamp
-) engine InnoDB comment '项目';
-
 -- article 文章
 create table if not exists article (
 	id bigint not null,
-	project_id int,
 	author_id int,
 	title varchar(256) not null,
 	content text,
@@ -59,10 +47,24 @@ insert into user (id, login_name, email, name, address, description, create_time
 	values (1, 'hwangsyin', 'hwangsyin@gmail.com', '信息中心开发团队博客项目发起人', '中国北京', '鉴于信息中心软件开发及发布流程现状开发了该博客系统', 
 	'2013-11-02 09:00:00.000', '2013-11-02 09:00:00.000');
 
-insert into project (id, name, abbr_name, description, owner_id, create_time, last_update_time) 
-	values(1, '信息中心开发团队博客', '信息中心开发团队博客', '源代码仓库: https://github.com/hwangsyin/cbrc-devteam-blog', 
-	1, '2013-11-02 09:00:00.000', '2013-11-02 09:00:00.000');
-	
 insert into article (id, project_id, author_id, title, content, create_time, publish_time, last_update_time)
 	values(1, 1, 1, '关于信息中心开发团队博客', '为什么有这个博客项目', '2013-11-02 09:00:00.000',
 	'2013-11-02 09:00:00.000', '2013-11-02 09:00:00.000');
+
+insert into tag (id, name, author_id, create_time, last_update_time)
+    values(1, '开发团队博客', 1, '2013-11-05 12:24:30.000', '2013-11-05 12:24:30.000');
+
+insert into tag (id, name, author_id, create_time, last_update_time)
+    values(2, '档案系统', 1, '2013-11-05 12:24:30.000', '2013-11-05 12:24:30.000');
+
+insert into tag (id, name, author_id, create_time, last_update_time)
+    values(3, '新OA系统', 1, '2013-11-05 12:24:30.000', '2013-11-05 12:24:30.000');
+
+insert into tag (id, name, author_id, create_time, last_update_time)
+    values(4, '银监局版OA系统', 1, '2013-11-05 12:24:30.000', '2013-11-05 12:24:30.000');
+
+insert into tag (id, name, author_id, create_time, last_update_time)
+    values(5, '档案迁移', 1, '2013-11-05 12:24:30.000', '2013-11-05 12:24:30.000');
+
+insert into tag (id, name, author_id, create_time, last_update_time)
+    values(6, 'OA迁移', 1, '2013-11-05 12:24:30.000', '2013-11-05 12:24:30.000');

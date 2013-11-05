@@ -3,12 +3,12 @@ import tornado.web
 import settings
 import environment
 
-import service.service as service
+from service.service import article_service
 
 # 首页
 class IndexHandler(tornado.web.RequestHandler):
     def get(self):
-        articles = service.articleService.query_most_published_article()
+        articles = article_service.query_most_published_article()
         model = {"articles": articles}
         self.render(settings.app_settings["index_page"], **model)
 

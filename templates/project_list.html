@@ -8,11 +8,20 @@
 	<body class="main-layout">
 		{% include "nav-bar.tpl" %}
 		<div class="content-layout">
+			{#
 			{% for project in projects %}
 				<div>
 					{{ project.id }}, {{ project.name }}, {{ project.abbr_name }}, {{ project.owner.name }}, {{project.create_time}}
 				</div>
 			{% end %}
+			#}
+			<div class="project-item">
+				<h1 class="project-title">Title</h1>
+				<div class="project-info-item-line">
+					<span>名称: 档案系统</span>
+					<span>简称: 档案系统</span>
+				</div>
+			</div>
 		</div>
 	</body>
 </html>
