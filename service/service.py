@@ -5,6 +5,9 @@ from domain.domain import Article
 from domain.domain import Project
 from domain.domain import User
 
+# 连接池
+# conn_pool = mysql.connector.connect(settings.app_settings["db_connection"])
+
 # 文章管理
 class ArticleService:
     # 查询最近发表的文章
