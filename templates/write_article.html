@@ -8,13 +8,24 @@
 	<body class="main-layout">
 		{% include "nav-bar.tpl" %}
 		<div class="content-layout">
-			<div class="article-summary-layout">
-				<form action="/article/write" method="POST">
-					标题: <input type="text" name="title" />
-					正文: <textarea name="content" rows="20" cols="30"/>
-					<input type="submit" value="提交"/>
-				</form>
-			</div>
+		<div class="article-summary-layout">
+		    <div class="article-writing-form">
+                        <form action="/article/write" method="POST">
+			    <div class="input">
+				<label class="input-label">*标题: </label>
+			        <input type="text" name="title" class="input-field input-field-title" />
+			    </div>
+			    <div class="input">
+				<label class="input-label">*正文: </label>
+			        <textarea type="text" name="content" class="input-field input-field-content"></textarea>
+			    </div>
+			    <div class="submit">
+				<span class="input-description">带 * 的输入项为必填项</span>
+			        <input type="submit" value="提交" class="submit-button"/>
+		            </div>
+		        </form>
+	            </div>
 		</div>
+	        </div>
 	</body>
 </html>

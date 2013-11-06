@@ -13,6 +13,7 @@ app_settings = {
     "about_page": "about.html",
     "article_page": "article.html",
     "article_list_page": "article_list.html",
+    "write_article_page": "write_article.html",
     "project_list_page": "project_list.html",
     "tag_list_page": "tag_list.html",
 	"404_page": "404.html",

@@ -8,9 +8,6 @@ from domain.domain import Tag
 
 import service.database as db
 
-# 连接池
-# conn_pool = mysql.connector.connect(settings.app_settings["db_connection"])
-
 # 文章管理
 class ArticleService:
     # 查询最近发表的文章
@@ -116,6 +113,11 @@ class ArticleService:
         cursor.close()
         conn.close()
         return article
+
+    # 添加新文章
+    def add(self, article):
+        # implement
+        return 1
 
 # 标签管理
 class TagService:

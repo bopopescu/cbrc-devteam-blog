@@ -10,6 +10,7 @@ import handlers.blog
 handlers = [
     (r"/", handlers.util.IndexHandler),
     (r"/about", handlers.util.AboutHandler),
+    (r"/article/write", handlers.blog.ArticleWritingHandler),
     (r"/article/(.*)", handlers.blog.ArticleHandler),
     (r"/tag", handlers.blog.TagHandler),
     (r"/tag/(.*)", handlers.blog.ArticleListByTagHandler),
