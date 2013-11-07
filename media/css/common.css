@@ -85,18 +85,24 @@
 }
 
 .article-writing-form {
+    font-family: "Microsoft YaHei", FangSong, FangSong_GB2312, SimHei, SimSun;
     font-size: 13px;
 }
 
 .input {
-    border: 1px solid red;
+    margin: auto auto 20px auto;
 }
 
-.input-label {
+.label {
     display: inline-block;
-    border: 1px solid red;
-    width: 100px;
-    vertical-align: bottom;
+    width: 70px;
+    font-size: 15px;
+    text-align: left;
+    margin: auto 0px auto auto;
+}
+
+.label-content {
+    vertical-align: top;
 }
 
 .input-prompt {
@@ -105,20 +111,29 @@
 
 .input-field {
     border: 1px solid rgba(0, 0, 0, .2);
-    width: 500px;
+    width: 700px;
+    padding: 0;
 }
 
 .input-field-title {
-    height: 30px;
+    padding-bottom: 0px;
+    height: 25px;
+    vertical-align: bottom;
 }
 
 .input-field-content {
-    height: 450px;
+    height: 400px;
+    vertical-align: top;
+}
+
+.description {
+    margin: 20px auto 0 74px;
+    padding: 0;
 }
 
 .submit {
-    margin-top: 30px;
-    text-align: right;
+    margin-top: 20px;
+    padding-left: 700px;
 }
 
 .submit-button {

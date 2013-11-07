@@ -11,16 +11,19 @@
 		<div class="article-summary-layout">
 		    <div class="article-writing-form">
                         <form action="/article/write" method="POST">
-			    <div class="input">
-				<label class="input-label">*标题: </label>
+			    <div class="input input-title">
+				<label class="label"><span class="input-prompt">*&nbsp;&nbsp;</span>标题: </label>
 			        <input type="text" name="title" class="input-field input-field-title" />
 			    </div>
 			    <div class="input">
-				<label class="input-label">*正文: </label>
+				<label class="label"><span class="input-prompt">*&nbsp;&nbsp;</span>正文: </label>
 			        <textarea type="text" name="content" class="input-field input-field-content"></textarea>
 			    </div>
+			    <p class="description">
+			        1、 带 <span class="input-prompt">*</span> 的输入项为必填项<br/>
+				2、 Some other tips
+			    </p>
 			    <div class="submit">
-				<span class="input-description">带 * 的输入项为必填项</span>
 			        <input type="submit" value="提交" class="submit-button"/>
 		            </div>
 		        </form>
